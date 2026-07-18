@@ -1,0 +1,45 @@
+# Robot config for Franka Panda (single arm, 7-DOF + 1 gripper)
+# ==========================================================================
+# State:  14 dim = joint_cos(7) + eef_pos(3) + gripper_qpos(1) + cube_pos(3)
+# Action: 8 dim  = joint_vel(7) + gripper_cmd(1)
+# Image:  agentview camera (simulation rendering)
+#
+# This config maps between raw observation keys and VLA model feature names.
+# Used by FeatureTransform to apply/unapply feature preprocessing.
+
+states:
+  # joint_pos_cos(7) → observation.state.arm.position
+  - observation.state.arm.position:
+      origin_keys:
+        - observation.state:
+            start: 0
+            end: 7
+
+  # eef_pos(3)+gripper_qpos(1)+cube_pos(3)=7 → observation.state.effector.position
+  - observation.state.effector.position:
+      origin_keys:
+        - observation.state:
+            start: 7
+            end: 14
+
+actions:
+  # joint velocities(7) → action.arm.position
+  - action.arm.position:
+      origin_keys:
+        - action:
+            start: 0
+            end: 7
+      subtract_state: false
+
+  # gripper cmd(1) → action.effector.position
+  - action.effector.position:
+      origin_keys:
+        - action:
+            start: 7
+            end: 8
+      subtract_state: false
+
+images:
+  # Single simulation camera → observation.images.camera_top
+  - observation.images.camera_top:
+      origin_keys: observation.images.agentview

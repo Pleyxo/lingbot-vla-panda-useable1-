@@ -1,0 +1,66 @@
+# Training config for single-arm Franka Panda on single RTX 4090
+# ==========================================================================
+# Strategy: Action-Expert-Only → freeze vision encoder + language model,
+#            only train the action expert (diffusion policy head).
+#            Fits comfortably on 24 GB VRAM.
+#
+# State:  14 dim = joint_cos(7) + eef_pos(3) + gripper_qpos(1) + cube_pos(3)
+# Action: 8 dim  = joint_vel(7) + gripper_cmd(1)
+
+model:
+  model_path: /data/models/lingbot-vla-4b
+  tokenizer_path: /data/models/Qwen2.5-VL-3B-Instruct
+
+data:
+  datasets_type: vla
+  data_name: panda
+  train_path: /data/coding/lingbot-vla/vla_project/lerobot_data
+  joints:
+    - arm.position: 7                              # state[:7]=joint_cos, action[:7]=joint_vel
+    - effector.position: 7                         # state[7:14]=eef+gripper+cube (7 dim)
+  cameras:
+    - camera_top                                   # single agentview camera
+  num_workers: 4
+  norm_type: meanstd
+  norm_stats_file: /data/coding/lingbot-vla/assets/norm_stats/panda.json
+
+train:
+  output_dir: /data/coding/lingbot-vla/vla_project/action_expert_lora
+
+  # ── Single GPU ──
+  data_parallel_mode: fsdp2
+  enable_full_shard: true
+  module_fsdp_enable: false
+  enable_activation_offload: false
+  ulysses_parallel_size: 1
+
+  # ── Action-Expert-Only ──
+  freeze_vision_encoder: true                      # freeze Qwen2.5-VL vision encoder
+  tokenizer_max_length: 72
+
+  # ── Dimensions ──
+  max_action_dim: 75                               # model architecture capacity (unchanged)
+  max_state_dim: 75                                # model architecture capacity (unchanged)
+  action_dim: 8                                    # Panda: 7 joint vel + 1 gripper
+  chunk_size: 50                                   # predict 50 future actions (match model)
+
+  # ── Optimizer (small batch for 24GB VRAM) ──
+  lr: 5.0e-5
+  lr_decay_style: constant
+  micro_batch_size: 1
+  gradient_accumulation_steps: 4                    # effective batch = 4
+  train_expert_only: true                           # skip vision computation, only state->action
+  rmpad: false
+  max_steps: 1000
+
+  # ── Checkpointing ──
+  ckpt_manager: dcp
+  save_steps: 0
+  save_epochs: 0
+  save_hf_weights: true  # saved at max_steps (final)
+  enable_resume: true
+
+  # ── Precision ──
+  enable_fp32: false
+  enable_mixed_precision: true
+  use_compile: false
