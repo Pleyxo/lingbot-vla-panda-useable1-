@@ -132,10 +132,23 @@ MUJOCO_GL=osmesa python vla_project/infer_panda.py \
 
 ## 已知问题 & 修复记录
 
-### Recording_1 (2026-07-18): 推理 steps=1 立即失败
+### Recording_1 (2026-07-18): 推理 steps=1 立即失败 ✅ 已修复
 - **问题**: 模型输出 `chunk["action"]` 联合键，但 infer_panda.py 查找 `chunk["action.arm.position"]` 导致 break
 - **修复**: infer_panda.py 第 88-104 行，同时支持联合键和分离键两种格式
-- **详见**: Panda_VLA_仿真系统问题排查和修改日志.docx
+
+### Recording_2 (2026-07-19): 模型动作过弱，无法完成抓取任务 ⚠️ 待解决
+- **现象**: 10 个 episode 全部跑满 500 步超时，机械臂几乎不移动，cube_z 始终在桌面高度(0.82)
+- **根因分析**:
+  1. **训练数据动作方差过小**: `norm_stats/panda.json` 显示关节 3/5/6/7 的 action std = 1e-8（几乎为零），说明遥操作数据中这些关节没有有效运动
+  2. **模型输出控制信号太弱**: 首步 joint_vel ≈ [0.1, 0.02, 0, -0.002, 0, 0, 0]，无法驱动机械臂
+  3. **成功判断误导**: `infer_panda.py` 用 `bool(done)` 判断成功，但 done=True 包含 horizon 超时，导致误报 100% 成功率
+- **改进方案**:
+  - **A (推荐)**: 重新录制 10-20 条更多样化的遥操作轨迹，覆盖大范围关节运动
+  - **B**: 改进遥操作键盘映射，支持所有 7 关节独立控制 + 速度倍率
+  - **C**: 调整训练超参（增加 max_steps、数据增强、增加噪声）
+  - **D**: 修复成功判断逻辑，改用 `env._check_success()` 替代 `bool(done)`
+  - **E**: 考虑改用末端执行器空间控制 (OSC_POSE, 7-dim action) 替代关节速度控制 (8-dim)
+- **估计工作量**: 录制 0.5-1h + 数据处理 10min + 训练 30min + 推理 1h ≈ 2-3 小时
 
 ## 环境变量
 ```bash
